@@ -5,7 +5,7 @@ import sys
 
 REPO = "alonid/vim-testbed"
 TAG = "10-rust.vim"
-IMAGE = "%s:%s" % (REPO, TAG)
+IMAGE = f"{REPO}:{TAG}"
 
 class Error(Exception):
     pass
@@ -13,15 +13,13 @@ class Error(Exception):
 def system(cmd, capture=False, ok_fail=False):
     if capture:
         f = os.popen(cmd)
-        d = f.read()
-        return d
-
+        return f.read()
     res = os.system(cmd)
     if res != 0:
         if ok_fail:
             return res
 
-        raise Error("Error executing: %s" % (cmd, ))
+        raise Error(f"Error executing: {cmd}")
     return 0
 
 def root():
@@ -32,36 +30,34 @@ def prep():
     for i in [".cargo", ".rustup", ".multirust"]:
         l = os.path.join(d, i)
         if not os.path.lexists(l):
-            os.symlink("/rust/" + i, l)
+            os.symlink(f"/rust/{i}", l)
 
     l = os.path.join(root(), "test/.vimrc")
     if not os.path.lexists(l):
         os.symlink("vimrc", l)
 
     if not os.path.exists(os.path.join(d, ".profile")):
-        f = open(os.path.join(d, ".profile"), "w")
-        f.write('export PATH="$HOME/.cargo/bin:$PATH"\n')
-        f.close()
+        with open(os.path.join(d, ".profile"), "w") as f:
+            f.write('export PATH="$HOME/.cargo/bin:$PATH"\n')
 
 def docker_run(cmd, interactive=False, ok_fail=False):
     prep()
     d = root()
-    params = "-v %s:/testplugin -v %s/test:/home/vimtest" % (d, d)
+    params = f"-v {d}:/testplugin -v {d}/test:/home/vimtest"
     params += " -e HOME=/home/vimtest"
     if not interactive:
         params += " -a stderr"
     params += " -e VADER_OUTPUT_FILE=/dev/stderr"
-    params += " -u %s" % (os.getuid(), )
+    params += f" -u {os.getuid()}"
     params += " -w /testplugin"
-    if interactive:
-        interactive_str = "-it"
-    else:
-        interactive_str = ""
-    return system("docker run %s --rm %s %s %s" % (interactive_str, params, IMAGE, cmd),
-            ok_fail=ok_fail)
+    interactive_str = "-it" if interactive else ""
+    return system(
+        f"docker run {interactive_str} --rm {params} {IMAGE} {cmd}",
+        ok_fail=ok_fail,
+    )
 
 def image_exists():
-    r = system("docker images -q %s" % (IMAGE, ), capture=True)
+    r = system(f"docker images -q {IMAGE}", capture=True)
     return len(r.strip().splitlines()) >= 1
 
 def tests_on_docker():
@@ -78,7 +74,9 @@ def inside_docker():
         sys.exit(1)
 
 def run_with_vimrc(vimrc):
-    res = system("vim -u %s --not-a-term '+Vader! test/*.vader'" % (vimrc, ), ok_fail=True)
+    res = system(
+        f"vim -u {vimrc} --not-a-term '+Vader! test/*.vader'", ok_fail=True
+    )
     if res != 0:
         sys.exit(1)
 
@@ -93,7 +91,7 @@ def main():
 
     if not image_exists():
         print("Need to take image from remote")
-        system("docker pull %s" % (IMAGE, ))
+        system(f"docker pull {IMAGE}")
 
     if "-i" in sys.argv[1:]:
         docker_run("bash -l", interactive=True)
